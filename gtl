@@ -10,7 +10,7 @@ function ensure_gentle_installed() {
 		curl --silent \
 			--location \
 			-o "${bin_loc}" \
-			"https://github.com/shelbyd/gentle/releases/latest/download/gentle"
+			"https://github.com/PineStreetLabs/gentle/releases/latest/download/gentle"
 		chmod +x "${bin_loc}"
 	fi
 
