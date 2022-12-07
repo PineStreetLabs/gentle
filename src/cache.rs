@@ -75,6 +75,8 @@ impl<'f, F: FileSystem> Cache<'f, F> {
     }
 
     fn copy_into(&self, from: &str, to: &str) -> anyhow::Result<()> {
+        eprintln!("copy_into({from:?}, {to:?})");
+
         if !self.fs.exists(from).context("Checking file existence")? {
             return Ok(());
         }
@@ -119,14 +121,23 @@ impl<'f, F: FileSystem> Cache<'f, F> {
             std::io::copy(&mut from_file, &mut hasher)?;
             let hash = hasher.finalize().to_hex();
 
-            let mut write = self.fs.create_file(to)?;
-            write.write_all(HASHED_FILE_PREFIX)?;
-            write.write_all(hash.as_ref().as_bytes())?;
+            let mut write = self
+                .fs
+                .create_file(to)
+                .context(format!("Creating file {to:?}"))?;
+            write
+                .write_all(HASHED_FILE_PREFIX)
+                .context(format!("Writing HASHED_FILE_PREFIX to {to:?}"))?;
+            write
+                .write_all(hash.as_ref().as_bytes())
+                .context(format!("Writing hash to {to:?}"))?;
 
             format!("{}/large_files/{hash}", self.cache)
         };
 
-        self.fs.copy_file(&copy_from, &copy_to)?;
+        self.fs
+            .copy_file(&copy_from, &copy_to)
+            .context("Copying from {copy_from:?} to {copy_to:?}")?;
 
         Ok(())
     }
@@ -138,7 +149,9 @@ impl<'f, F: FileSystem> Cache<'f, F> {
 
         let (parent, _) = dir.rsplit_once("/").unwrap();
         self.create_dir_all(parent)?;
-        self.fs.create_dir(dir)?;
+        self.fs
+            .create_dir(dir)
+            .context(format!("Creating directory {dir:?}"))?;
 
         Ok(())
     }
@@ -156,6 +169,7 @@ impl<'f, F: FileSystem> Cache<'f, F> {
 mod tests {
     use super::*;
 
+    use std::fs::*;
     use tempfile::tempdir;
 
     #[test]
