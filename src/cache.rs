@@ -149,11 +149,15 @@ impl<'f, F: FileSystem> Cache<'f, F> {
 
         let (parent, _) = dir.rsplit_once("/").unwrap();
         self.create_dir_all(parent)?;
+
+        // Check again because /foo/. would have already created this directory.
+        if self.fs.exists(dir)? {
+            return Ok(());
+        }
+
         self.fs
             .create_dir(dir)
-            .context(format!("Creating directory {dir:?}"))?;
-
-        Ok(())
+            .context(format!("Creating directory {dir:?}"))
     }
 
     pub(crate) fn load(&self) -> anyhow::Result<()> {
@@ -335,5 +339,53 @@ mod tests {
 
         let metadata = metadata(&file_path).unwrap();
         assert_eq!(metadata.permissions().mode() & 0o777, 0o755);
+    }
+
+    #[test]
+    fn relative_path_with_prefix() {
+        let dir = tempdir().unwrap();
+        let fs = PhysicalFS::new(dir.path());
+
+        fs.create_dir("/project").unwrap();
+        fs.create_dir("/project/src").unwrap();
+        write!(fs.create_file("/project/src/foo.txt").unwrap(), "foo").unwrap();
+
+        let cache = Cache::new(&fs, "/cache", "/project");
+
+        cache.save("./src").unwrap();
+        let _ = fs.remove_file("/project/src/foo.txt");
+        let _ = fs.remove_dir("/project/src");
+        cache.load().unwrap();
+
+        let mut foo = String::new();
+        fs.open_file("/project/src/foo.txt")
+            .unwrap()
+            .read_to_string(&mut foo)
+            .unwrap();
+        assert_eq!(foo, "foo");
+    }
+
+    #[test]
+    fn relative_path_parent_dir() {
+        let dir = tempdir().unwrap();
+        let fs = PhysicalFS::new(dir.path());
+
+        fs.create_dir("/project").unwrap();
+        fs.create_dir("/project/src").unwrap();
+        write!(fs.create_file("/project/src/foo.txt").unwrap(), "foo").unwrap();
+
+        let cache = Cache::new(&fs, "/cache", "/project");
+
+        cache.save("src/../src").unwrap();
+        let _ = fs.remove_file("/project/src/foo.txt");
+        let _ = fs.remove_dir("/project/src");
+        cache.load().unwrap();
+
+        let mut foo = String::new();
+        fs.open_file("/project/src/foo.txt")
+            .unwrap()
+            .read_to_string(&mut foo)
+            .unwrap();
+        assert_eq!(foo, "foo");
     }
 }
