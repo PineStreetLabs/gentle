@@ -75,8 +75,6 @@ impl<'f, F: FileSystem> Cache<'f, F> {
     }
 
     fn copy_into(&self, from: &str, to: &str) -> anyhow::Result<()> {
-        eprintln!("copy_into({from:?}, {to:?})");
-
         if !self.fs.exists(from).context("Checking file existence")? {
             return Ok(());
         }
