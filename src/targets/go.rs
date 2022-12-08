@@ -62,6 +62,34 @@ impl Target for GoModTarget {
             .map_err(|out| anyhow::anyhow!(out.stderr))
     }
 
+    fn perform_format(&self) -> anyhow::Result<()> {
+        let out = Command::new("go")
+            .args(["fmt"])
+            .current_dir(&self.path)
+            .output()
+            .context("Running golangci-lint")?
+            .success_ok()
+            .map_err(|out| anyhow::anyhow!(out.stderr))?;
+
+        let modified = out
+            .stdout
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<&str>>();
+
+        if modified.is_empty() {
+            return Ok(());
+        }
+
+        let padded = modified
+            .into_iter()
+            .map(|l| format!("    {l}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Err(anyhow::anyhow!("go fmt modified files:\n{padded}"))
+    }
+
     fn cache_paths(&self) -> HashSet<PathBuf> {
         [self.cache_dir()].into_iter().collect()
     }

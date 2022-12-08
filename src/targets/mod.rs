@@ -30,6 +30,7 @@ pub trait Target: Display + Send + Sync + 'static {
     fn perform_test(&self) -> anyhow::Result<()>;
     // TODO(shelbyd): Default to successful and logging implementation.
     fn perform_lint(&self) -> anyhow::Result<()>;
+    fn perform_format(&self) -> anyhow::Result<()>;
 
     fn cache_paths(&self) -> HashSet<PathBuf> {
         Default::default()
