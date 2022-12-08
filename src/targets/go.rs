@@ -51,6 +51,7 @@ impl Target for GoModTarget {
     }
 
     fn perform_lint(&self) -> anyhow::Result<()> {
+        // TODO(shelbyd): Install required tools.
         Command::new("golangci-lint")
             .args(["--verbose"])
             .current_dir(&self.path)
