@@ -60,6 +60,20 @@ impl Target for RustCargoTarget {
             .map_err(|out| anyhow::anyhow!("{}\n{}", out.stderr, out.stdout))
     }
 
+    fn perform_format(&self) -> anyhow::Result<()> {
+        Command::new("cargo")
+            .args([
+                "fmt",
+                "--manifest-path",
+                &self.path.join("Cargo.toml").to_string_lossy(),
+                "--check",
+            ])
+            .output()?
+            .success_ok()
+            .map(|_| ())
+            .map_err(|out| anyhow::anyhow!("{}\n{}", out.stderr, out.stdout))
+    }
+
     fn cache_paths(&self) -> HashSet<PathBuf> {
         [self.path.join("target")].into_iter().collect()
     }

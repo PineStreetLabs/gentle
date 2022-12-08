@@ -44,6 +44,7 @@ pub enum Command {
 pub enum Action {
     Test,
     Lint,
+    Format,
 }
 
 impl Display for Action {
@@ -51,6 +52,7 @@ impl Display for Action {
         match self {
             Action::Test => write!(f, "test"),
             Action::Lint => write!(f, "lint"),
+            Action::Format => write!(f, "format"),
         }
     }
 }
@@ -95,6 +97,7 @@ fn main() -> anyhow::Result<()> {
                     .run(&format!("{action} {target}"), move || match action {
                         Action::Test => target.perform_test(),
                         Action::Lint => target.perform_lint(),
+                        Action::Format => target.perform_format(),
                     })
                     .map_err(|(id, err)| err.context(id))?;
             }
