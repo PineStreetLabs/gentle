@@ -43,12 +43,14 @@ pub enum Command {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, StructOpt)]
 pub enum Action {
     Test,
+    Lint,
 }
 
 impl Display for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Action::Test => write!(f, "test"),
+            Action::Lint => write!(f, "lint"),
         }
     }
 }
@@ -92,6 +94,7 @@ fn main() -> anyhow::Result<()> {
                 runner
                     .run(&format!("{action} {target}"), move || match action {
                         Action::Test => target.perform_test(),
+                        Action::Lint => target.perform_lint(),
                     })
                     .map_err(|(id, err)| err.context(id))?;
             }

@@ -40,7 +40,24 @@ impl Target for RustCargoTarget {
             .output()?
             .success_ok()
             .map(|_| ())
-            .map_err(|out| anyhow::anyhow!(format!("{}\n{}", out.stderr, out.stdout)))
+            .map_err(|out| anyhow::anyhow!("{}\n{}", out.stderr, out.stdout))
+    }
+
+    fn perform_lint(&self) -> anyhow::Result<()> {
+        Command::new("cargo")
+            .args([
+                "clippy",
+                "--manifest-path",
+                &self.path.join("Cargo.toml").to_string_lossy(),
+                "--no-deps",
+                "--color=always",
+                "--",
+                "--deny=warnings",
+            ])
+            .output()?
+            .success_ok()
+            .map(|_| ())
+            .map_err(|out| anyhow::anyhow!("{}\n{}", out.stderr, out.stdout))
     }
 
     fn cache_paths(&self) -> HashSet<PathBuf> {
