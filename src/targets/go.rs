@@ -1,5 +1,7 @@
 use super::*;
 
+use anyhow::Context;
+
 #[linkme::distributed_slice(TARGET_DISCOVERY)]
 fn discover(path: &Path) -> anyhow::Result<Vec<Box<dyn Target>>> {
     if path.join("go.mod").try_exists()? {
@@ -38,13 +40,23 @@ impl Display for GoModTarget {
 
 impl Target for GoModTarget {
     fn perform_test(&self) -> anyhow::Result<()> {
-        let out = Command::new("go")
+        Command::new("go")
             .args(&["test"])
             .env("GOCACHE", self.cache_dir())
             .current_dir(&self.path)
-            .output()?;
+            .output()?
+            .success_ok()
+            .map(|_| ())
+            .map_err(|out| anyhow::anyhow!(out.stderr))
+    }
 
-        out.success_ok()
+    fn perform_lint(&self) -> anyhow::Result<()> {
+        Command::new("golangci-lint")
+            .args(["--verbose"])
+            .current_dir(&self.path)
+            .output()
+            .context("Running golangci-lint")?
+            .success_ok()
             .map(|_| ())
             .map_err(|out| anyhow::anyhow!(out.stderr))
     }
