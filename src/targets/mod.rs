@@ -35,6 +35,10 @@ pub trait Target: Display + Send + Sync + 'static {
     fn cache_paths(&self) -> HashSet<PathBuf> {
         Default::default()
     }
+
+    fn lockfiles(&self) -> HashSet<PathBuf> {
+        Default::default()
+    }
 }
 
 trait OutputExt {

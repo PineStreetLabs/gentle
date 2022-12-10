@@ -11,6 +11,7 @@ use std::{
 use structopt::*;
 
 mod cache;
+mod lockfiles;
 
 mod multi_runner;
 use multi_runner::*;
@@ -34,6 +35,7 @@ pub enum Command {
     CacheSave {
         to: PathBuf,
     },
+    LockfileHash,
 
     // TODO(shelbyd): Allow multiple actions.
     #[structopt(flatten)]
@@ -106,6 +108,7 @@ fn main() -> anyhow::Result<()> {
 
         Command::CacheLoad { from } => cache::load(from)?,
         Command::CacheSave { to } => cache::save(to)?,
+        Command::LockfileHash => println!("{}", lockfiles::hash()?.to_hex()),
     }
 
     Ok(())
