@@ -1,5 +1,7 @@
 use super::*;
 
+use anyhow::Context;
+
 #[linkme::distributed_slice(TARGET_DISCOVERY)]
 fn discover(path: &Path) -> anyhow::Result<Vec<Box<dyn Target>>> {
     if path.join("Cargo.toml").try_exists()? {
@@ -34,7 +36,6 @@ impl Target for RustCargoTarget {
                 "test",
                 "--manifest-path",
                 &self.path.join("Cargo.toml").to_string_lossy(),
-                "--jobs=1",
                 "--color=always",
             ])
             .output()?
@@ -72,6 +73,44 @@ impl Target for RustCargoTarget {
             .success_ok()
             .map(|_| ())
             .map_err(|out| anyhow::anyhow!("{}\n{}", out.stderr, out.stdout))
+    }
+
+    fn perform_build(&self, build: &Build) -> anyhow::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        Command::new("cargo")
+            .args(&[
+                "build",
+                "--release",
+                "--manifest-path",
+                &self.path.join("Cargo.toml").to_string_lossy(),
+                "--color=always",
+            ])
+            .output()?
+            .success_ok()
+            .map_err(|out| anyhow::anyhow!("{}\n{}", out.stderr, out.stdout))?;
+
+        let release_dir = self.path.join("target/release");
+        for entry in std::fs::read_dir(&release_dir)
+            .context(format!("Listing contents of {release_dir:?}"))?
+        {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                continue;
+            }
+            let permissions = path.metadata()?.permissions();
+            let is_executable = permissions.mode() & 0o100 != 0;
+
+            if !is_executable {
+                continue;
+            }
+
+            let filename = path.file_name().expect("inside target/release");
+            std::fs::copy(&path, build.out.join(filename))?;
+        }
+
+        Ok(())
     }
 
     fn cache_paths(&self) -> HashSet<PathBuf> {

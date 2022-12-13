@@ -60,8 +60,12 @@ impl<E: Send + 'static, P: ProgressListener> ParRunner<E, P> {
             .unwrap();
 
         let sender = self.sender.clone();
-        self.handles
-            .insert(id, spawn(move || sender.send((id, f())).unwrap()));
+        self.handles.insert(
+            id,
+            spawn(move || {
+                let _ = sender.send((id, f()));
+            }),
+        );
 
         self.progress.on_start(&name);
 

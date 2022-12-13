@@ -67,7 +67,7 @@ impl Target for GoModTarget {
             .args(["fmt"])
             .current_dir(&self.path)
             .output()
-            .context("Running golangci-lint")?
+            .context("Running `go fmt`")?
             .success_ok()
             .map_err(|out| anyhow::anyhow!(out.stderr))?;
 
@@ -88,6 +88,20 @@ impl Target for GoModTarget {
             .collect::<Vec<_>>()
             .join("\n");
         Err(anyhow::anyhow!("go fmt modified files:\n{padded}"))
+    }
+
+    fn perform_build(&self, build: &Build) -> anyhow::Result<()> {
+        let current_dir = std::env::current_dir()?;
+
+        Command::new("go")
+            .args(&["build", "-o"])
+            .arg(&current_dir.join(&build.out))
+            .env("GOCACHE", self.cache_dir())
+            .current_dir(&self.path)
+            .output()?
+            .success_ok()
+            .map(|_| ())
+            .map_err(|out| anyhow::anyhow!(out.stderr))
     }
 
     fn cache_paths(&self) -> HashSet<PathBuf> {
