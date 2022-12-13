@@ -37,16 +37,38 @@ pub enum Command {
     },
     LockfileHash,
 
+    Do(ActionCommand),
+
     // TODO(shelbyd): Allow multiple actions.
     #[structopt(flatten)]
     Action(Action),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, StructOpt)]
+#[derive(Debug, PartialEq, Eq, Clone, StructOpt)]
+pub struct ActionCommand {
+    #[structopt(long)]
+    filter: Option<String>,
+
+    #[structopt(subcommand)]
+    verb: Action,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, StructOpt)]
 pub enum Action {
     Test,
     Lint,
     Format,
+    Build(Build),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, StructOpt)]
+pub struct Build {
+    #[structopt(
+        long,
+        help = "Directory to write outputs to",
+        default_value = "gentle/out"
+    )]
+    out: PathBuf,
 }
 
 impl Display for Action {
@@ -55,6 +77,7 @@ impl Display for Action {
             Action::Test => write!(f, "test"),
             Action::Lint => write!(f, "lint"),
             Action::Format => write!(f, "format"),
+            Action::Build(_) => write!(f, "build"),
         }
     }
 }
@@ -73,43 +96,49 @@ fn main() -> anyhow::Result<()> {
         Config::default()
     };
 
-    match options.command {
-        Command::Action(action) => {
-            let targets = targets::targets()?
-                .into_iter()
-                .filter(|t| !config.skip.contains(&t.to_string()))
-                .collect::<Vec<_>>();
+    let action = match options.command {
+        Command::CacheLoad { from } => return cache::load(from),
+        Command::CacheSave { to } => return cache::save(to),
+        Command::LockfileHash => {
+            println!("{}", lockfiles::hash()?.to_hex());
+            return Ok(());
+        }
+        Command::Do(action) => action,
+        Command::Action(verb) => ActionCommand { verb, filter: None },
+    };
 
-            let progress: Box<dyn ProgressListener> =
-                if std::env::var("CI") == Ok(String::from("true")) {
-                    Box::new(ContinuousIntegrationProgress::new(targets.len()))
-                } else if std::io::stderr().is_terminal() {
-                    Box::new(TermProgress::new())
-                } else {
-                    Box::new(NullProgressListener)
-                };
-            let mut runner = ParRunner::new(progress);
+    let targets = targets::targets()?
+        .into_iter()
+        .filter(|t| !config.skip.contains(&t.to_string()))
+        .collect::<Vec<_>>();
 
-            for target in targets {
-                if config.skip.contains(&target.to_string()) {
-                    continue;
-                }
+    let progress: Box<dyn ProgressListener> = if std::env::var("CI") == Ok(String::from("true")) {
+        Box::new(ContinuousIntegrationProgress::new(targets.len()))
+    } else if std::io::stderr().is_terminal() {
+        Box::new(TermProgress::new())
+    } else {
+        Box::new(NullProgressListener)
+    };
+    let mut runner = ParRunner::new(progress);
 
-                runner
-                    .run(&format!("{action} {target}"), move || match action {
-                        Action::Test => target.perform_test(),
-                        Action::Lint => target.perform_lint(),
-                        Action::Format => target.perform_format(),
-                    })
-                    .map_err(|(id, err)| err.context(id))?;
-            }
-            runner.into_wait().map_err(|(id, err)| err.context(id))?;
+    for target in targets {
+        if config.skip.contains(&target.to_string()) {
+            continue;
         }
 
-        Command::CacheLoad { from } => cache::load(from)?,
-        Command::CacheSave { to } => cache::save(to)?,
-        Command::LockfileHash => println!("{}", lockfiles::hash()?.to_hex()),
+        let action = action.clone();
+        runner
+            .run(&format!("{} {target}", action.verb), move || {
+                match action.verb {
+                    Action::Test => target.perform_test(),
+                    Action::Lint => target.perform_lint(),
+                    Action::Format => target.perform_format(),
+                    Action::Build(_) => Err(anyhow::anyhow!("NotImplemented: Build")),
+                }
+            })
+            .map_err(|(id, err)| err.context(id))?;
     }
+    runner.into_wait().map_err(|(id, err)| err.context(id))?;
 
     Ok(())
 }
