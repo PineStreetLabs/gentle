@@ -109,7 +109,7 @@ fn main() -> anyhow::Result<()> {
 
     let targets = targets::targets()?
         .into_iter()
-        .filter(|t| !config.skip.contains(&t.to_string()))
+        .filter(|t| should_run(&t.to_string(), &config.skip, &action.filter))
         .collect::<Vec<_>>();
 
     let progress: Box<dyn ProgressListener> = if std::env::var("CI") == Ok(String::from("true")) {
@@ -122,10 +122,6 @@ fn main() -> anyhow::Result<()> {
     let mut runner = ParRunner::new(progress);
 
     for target in targets {
-        if config.skip.contains(&target.to_string()) {
-            continue;
-        }
-
         let action = action.clone();
         runner
             .run(&format!("{} {target}", action.verb), move || {
@@ -133,7 +129,7 @@ fn main() -> anyhow::Result<()> {
                     Action::Test => target.perform_test(),
                     Action::Lint => target.perform_lint(),
                     Action::Format => target.perform_format(),
-                    Action::Build(_) => Err(anyhow::anyhow!("NotImplemented: Build")),
+                    Action::Build(build) => target.perform_build(&build),
                 }
             })
             .map_err(|(id, err)| err.context(id))?;
@@ -141,6 +137,20 @@ fn main() -> anyhow::Result<()> {
     runner.into_wait().map_err(|(id, err)| err.context(id))?;
 
     Ok(())
+}
+
+fn should_run(target: &str, skip: &HashSet<String>, filter: &Option<String>) -> bool {
+    if skip.contains(target) {
+        return false;
+    }
+
+    if let Some(filter) = filter {
+        if !target.starts_with(filter) {
+            return false;
+        }
+    }
+
+    true
 }
 
 struct TermProgress {

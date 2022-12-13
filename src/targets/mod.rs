@@ -1,3 +1,5 @@
+use super::Build;
+
 use std::{collections::*, fmt::Display, path::*, process::*};
 
 mod go;
@@ -31,6 +33,7 @@ pub trait Target: Display + Send + Sync + 'static {
     // TODO(shelbyd): Default to successful and logging implementation.
     fn perform_lint(&self) -> anyhow::Result<()>;
     fn perform_format(&self) -> anyhow::Result<()>;
+    fn perform_build(&self, build: &Build) -> anyhow::Result<()>;
 
     fn cache_paths(&self) -> HashSet<PathBuf> {
         Default::default()
@@ -59,6 +62,7 @@ impl OutputExt for Output {
     }
 }
 
+#[derive(Debug)]
 struct StringOutput {
     stdout: String,
     stderr: String,
