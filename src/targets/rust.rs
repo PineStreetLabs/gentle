@@ -77,4 +77,11 @@ impl Target for RustCargoTarget {
     fn cache_paths(&self) -> HashSet<PathBuf> {
         [self.path.join("target")].into_iter().collect()
     }
+
+    fn lockfiles(&self) -> HashSet<PathBuf> {
+        [self.path.join("Cargo.lock")]
+            .into_iter()
+            .filter(|p| p.exists())
+            .collect()
+    }
 }
