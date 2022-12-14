@@ -128,11 +128,7 @@ impl ProgressListener for NullProgressListener {
     fn on_finish(&mut self, _: &str) {}
 }
 
-impl<P> ProgressListener for P
-where
-    P: core::ops::DerefMut,
-    P::Target: ProgressListener,
-{
+impl ProgressListener for Box<dyn ProgressListener> {
     fn on_start(&mut self, name: &str) {
         (**self).on_start(name)
     }
