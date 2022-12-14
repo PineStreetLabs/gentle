@@ -2,9 +2,10 @@ use indicatif::*;
 use is_terminal::*;
 use serde::*;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     fmt::Display,
     path::*,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -211,19 +212,31 @@ impl ProgressListener for TermProgress {
 #[derive(Default)]
 struct ContinuousIntegrationProgress {
     total: usize,
-    running: HashMap<String, Instant>,
-    finished: HashMap<String, Duration>,
+    running: BTreeMap<String, Instant>,
+    finished: BTreeMap<String, Duration>,
 }
 
 impl ContinuousIntegrationProgress {
-    fn new(total: usize) -> Self {
+    fn new(total: usize) -> Arc<Mutex<Self>> {
         eprintln!("Running {total} tasks");
 
-        ContinuousIntegrationProgress {
+        let progress = Arc::new(Mutex::new(ContinuousIntegrationProgress {
             total,
             running: Default::default(),
             finished: Default::default(),
-        }
+        }));
+
+        let weak = Arc::downgrade(&progress);
+        std::thread::spawn(move || {
+            while let Some(arc) = weak.upgrade() {
+                arc.lock().unwrap().log_status();
+                drop(arc);
+
+                std::thread::sleep(std::time::Duration::from_secs(10));
+            }
+        });
+
+        progress
     }
 
     fn log_status(&self) {
@@ -242,25 +255,26 @@ impl ContinuousIntegrationProgress {
     }
 }
 
-impl ProgressListener for ContinuousIntegrationProgress {
+impl ProgressListener for Arc<Mutex<ContinuousIntegrationProgress>> {
     fn on_start(&mut self, name: &str) {
         eprintln!("Starting {name}");
-        self.running.insert(name.to_string(), Instant::now());
-
-        self.log_status();
+        self.lock()
+            .unwrap()
+            .running
+            .insert(name.to_string(), Instant::now());
     }
 
     fn on_finish(&mut self, name: &str) {
-        let started_at = self
+        let mut lock = self.lock().unwrap();
+
+        let started_at = lock
             .running
             .remove(name)
             .expect("called on_finish without on_start");
         let took = started_at.elapsed();
         eprintln!("Finished {name} in {}", humantime::format_duration(took));
 
-        self.finished.insert(name.to_string(), took);
-
-        self.log_status();
+        lock.finished.insert(name.to_string(), took);
     }
 }
 
@@ -268,11 +282,11 @@ impl Drop for ContinuousIntegrationProgress {
     fn drop(&mut self) {
         eprintln!("Runtime report:");
 
-        let mut sorted_order = self.finished.drain().collect::<Vec<_>>();
+        let mut sorted_order = self.finished.iter().collect::<Vec<_>>();
         sorted_order.sort_by_key(|(_, d)| *d);
 
         for (name, dur) in sorted_order {
-            eprintln!("  {}: {name}", humantime::format_duration(dur));
+            eprintln!("  {}: {name}", humantime::format_duration(*dur));
         }
     }
 }
