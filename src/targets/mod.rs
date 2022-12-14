@@ -2,6 +2,7 @@ use super::Build;
 
 use std::{collections::*, fmt::Display, path::*, process::*};
 
+mod docker;
 mod go;
 mod rust;
 
