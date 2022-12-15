@@ -108,7 +108,7 @@ impl Target for GoModTarget {
         [self.cache_dir()].into_iter().collect()
     }
 
-    fn lockfiles(&self) -> HashSet<PathBuf> {
+    fn lock_files(&self) -> HashSet<PathBuf> {
         [self.path.join("go.sum")].into_iter().collect()
     }
 }
