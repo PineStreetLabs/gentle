@@ -73,6 +73,9 @@ impl Target for DockerfileTarget {
             let _dest = args.pop().ok_or(anyhow::anyhow!("COPY with no args"))?;
 
             for arg in args {
+                // TODO(shelbyd): Should this find targets for src files in these directories?
+                //                Alternatively, incorporate .dockerignore.
+                //                Or could: https://snippets.khromov.se/see-which-files-are-included-in-your-docker-build-context/
                 builder = builder.path(arg);
             }
         }
