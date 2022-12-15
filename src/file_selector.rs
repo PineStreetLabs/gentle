@@ -43,7 +43,9 @@ impl FileSelector {
 
     fn includes(&self, path: impl AsRef<Path>) -> bool {
         let path = simplify(path);
-        if self.files.contains(&path) {
+
+        let included_by_file = path.ancestors().any(|a| self.files.contains(a));
+        if included_by_file {
             return true;
         }
 
@@ -61,7 +63,7 @@ impl FileSelector {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FileSelectorBuilder {
     subdir: PathBuf,
     files: HashSet<PathBuf>,
@@ -69,7 +71,7 @@ pub struct FileSelectorBuilder {
 }
 
 impl FileSelectorBuilder {
-    pub fn file(mut self, path: impl AsRef<Path>) -> Self {
+    pub fn path(mut self, path: impl AsRef<Path>) -> Self {
         self.files.insert(self.subdir.join(simplify(path)));
         self
     }
@@ -128,16 +130,23 @@ mod tests {
 
     #[test]
     fn explicit_file_includes_that() {
-        let selector = FileSelector::builder().file("foo.txt").build();
+        let selector = FileSelector::builder().path("foo.txt").build();
 
         assert_eq!(selector.includes("foo.txt"), true);
+    }
+
+    #[test]
+    fn dir_path_includes_children() {
+        let selector = FileSelector::builder().path("some/dir").build();
+
+        assert_eq!(selector.includes("some/dir/foo.txt"), true);
     }
 
     #[test]
     fn subdir_prefixes_files() {
         let selector = FileSelector::builder()
             .set_subdir("some_dir")
-            .file("foo.txt")
+            .path("foo.txt")
             .build();
 
         assert_eq!(selector.includes("foo.txt"), false);
@@ -168,14 +177,14 @@ mod tests {
 
     #[test]
     fn selector_has_prefix() {
-        let selector = FileSelector::builder().file("./foo.txt").build();
+        let selector = FileSelector::builder().path("./foo.txt").build();
 
         assert_eq!(selector.includes("foo.txt"), true);
     }
 
     #[test]
     fn file_has_prefix() {
-        let selector = FileSelector::builder().file("foo.txt").build();
+        let selector = FileSelector::builder().path("foo.txt").build();
 
         assert_eq!(selector.includes("./foo.txt"), true);
     }
@@ -184,7 +193,7 @@ mod tests {
     fn subdir_is_self() {
         let selector = FileSelector::builder()
             .set_subdir("./")
-            .file("foo.txt")
+            .path("foo.txt")
             .build();
 
         assert_eq!(selector.includes("foo.txt"), true);
@@ -194,7 +203,7 @@ mod tests {
     fn subdir_with_relative() {
         let selector = FileSelector::builder()
             .set_subdir("some/dir/../another")
-            .file("foo.txt")
+            .path("foo.txt")
             .build();
 
         assert_eq!(selector.includes("some/dir/foo.txt"), false);

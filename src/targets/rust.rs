@@ -128,8 +128,8 @@ impl Target for RustCargoTarget {
     fn src_files(&self) -> anyhow::Result<Option<FileSelector>> {
         let direct = FileSelector::builder()
             .set_subdir(&self.path)
-            .file("Cargo.toml")
-            .file("Cargo.lock")
+            .path("Cargo.toml")
+            .path("Cargo.lock")
             .glob("src/**/*.rs")
             .unwrap()
             .glob("test/**/*.rs")
