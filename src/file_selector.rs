@@ -55,6 +55,11 @@ impl FileSelector {
             .iter()
             .any(|pat| pat.matches_path_with(&path, match_options))
     }
+
+    pub fn include(&mut self, other: FileSelector) {
+        self.files.extend(other.files);
+        self.globs.extend(other.globs);
+    }
 }
 
 #[derive(Default)]

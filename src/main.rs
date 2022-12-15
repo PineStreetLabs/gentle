@@ -176,7 +176,7 @@ fn maybe_cache_success(
         return f();
     }
 
-    let files = match target.src_files() {
+    let files = match target.src_files()? {
         None => return f(),
         Some(f) => f,
     };

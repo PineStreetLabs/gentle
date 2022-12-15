@@ -44,8 +44,8 @@ pub trait Target: Display + Send + Sync + 'static {
         Default::default()
     }
 
-    fn src_files(&self) -> Option<FileSelector> {
-        None
+    fn src_files(&self) -> anyhow::Result<Option<FileSelector>> {
+        Ok(None)
     }
 }
 
