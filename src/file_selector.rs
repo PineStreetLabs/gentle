@@ -42,8 +42,7 @@ impl FileSelector {
     }
 
     fn includes(&self, path: impl AsRef<Path>) -> bool {
-        let path = path.as_ref();
-        let path = path.strip_prefix("./").unwrap_or(path).to_path_buf();
+        let path = simplify(path);
         if self.files.contains(&path) {
             return true;
         }
@@ -64,40 +63,25 @@ impl FileSelector {
 
 #[derive(Default)]
 pub struct FileSelectorBuilder {
-    subdir: Option<PathBuf>,
+    subdir: PathBuf,
     files: HashSet<PathBuf>,
     globs: Vec<Pattern>,
 }
 
 impl FileSelectorBuilder {
     pub fn file(mut self, path: impl AsRef<Path>) -> Self {
-        let path = path.as_ref();
-        let path = path.strip_prefix("./").unwrap_or(path);
-
-        let path = match &self.subdir {
-            Some(p) => p.join(path),
-            None => path.to_path_buf(),
-        };
-        self.files.insert(path);
+        self.files.insert(self.subdir.join(simplify(path)));
         self
     }
 
     pub fn glob(mut self, pattern: &str) -> Result<Self, PatternError> {
-        let pattern = match &self.subdir {
-            Some(p) => Pattern::new(&format!("{}/{pattern}", p.display()))?,
-            None => Pattern::new(pattern)?,
-        };
+        let pattern = Pattern::new(&self.subdir.join(pattern).display().to_string())?;
         self.globs.push(pattern);
         Ok(self)
     }
 
     pub fn set_subdir(mut self, path: impl AsRef<Path>) -> Self {
-        let path = path.as_ref();
-        let path = path.strip_prefix("./").unwrap_or(path);
-
-        // if path != Path::new("") {
-        self.subdir = Some(path.to_path_buf());
-        // }
+        self.subdir = simplify(path).to_path_buf();
         self
     }
 
@@ -107,6 +91,28 @@ impl FileSelectorBuilder {
             globs: self.globs,
         }
     }
+}
+
+fn simplify(path: impl AsRef<Path>) -> PathBuf {
+    use std::path::Component;
+
+    let path = path.as_ref();
+
+    let mut stack = Vec::new();
+    for comp in path.components() {
+        if comp == Component::CurDir {
+            continue;
+        }
+
+        if comp == Component::ParentDir {
+            stack.pop().expect("parent dir escapes path");
+            continue;
+        }
+
+        stack.push(comp);
+    }
+
+    stack.into_iter().collect()
 }
 
 #[cfg(test)]
@@ -182,5 +188,24 @@ mod tests {
             .build();
 
         assert_eq!(selector.includes("foo.txt"), true);
+    }
+
+    #[test]
+    fn subdir_with_relative() {
+        let selector = FileSelector::builder()
+            .set_subdir("some/dir/../another")
+            .file("foo.txt")
+            .build();
+
+        assert_eq!(selector.includes("some/dir/foo.txt"), false);
+        assert_eq!(selector.includes("some/another/foo.txt"), true);
+    }
+
+    #[test]
+    fn simplify_cases() {
+        assert_eq!(simplify("some/dir"), PathBuf::from("some/dir"));
+        assert_eq!(simplify("./some/dir"), PathBuf::from("some/dir"));
+        assert_eq!(simplify("dir/.."), PathBuf::from(""));
+        assert_eq!(simplify("dir/../some/path"), PathBuf::from("some/path"));
     }
 }
