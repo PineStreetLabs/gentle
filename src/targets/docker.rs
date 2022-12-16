@@ -54,4 +54,32 @@ impl Target for DockerfileTarget {
             .map(|_| ())
             .map_err(|out| anyhow::anyhow!("{}", out.stderr))
     }
+
+    fn src_files(&self) -> anyhow::Result<Option<FileSelector>> {
+        let dockerfile = self.path.join("Dockerfile");
+        let mut builder = FileSelector::builder().path(&dockerfile);
+
+        let docker_contents = std::fs::read_to_string(&dockerfile)?;
+        for line in docker_contents.lines() {
+            let line = line.trim();
+            let mut args = match line.strip_prefix("COPY ").or(line.strip_prefix("ADD ")) {
+                Some(suf) => suf,
+                None => continue,
+            }
+            .split(' ')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+
+            let _dest = args.pop().ok_or(anyhow::anyhow!("COPY with no args"))?;
+
+            for arg in args {
+                // TODO(shelbyd): Should this find targets for src files in these directories?
+                //                Alternatively, incorporate .dockerignore.
+                //                Or could: https://snippets.khromov.se/see-which-files-are-included-in-your-docker-build-context/
+                builder = builder.path(arg);
+            }
+        }
+
+        Ok(Some(builder.build()))
+    }
 }

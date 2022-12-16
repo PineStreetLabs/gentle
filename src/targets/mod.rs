@@ -1,4 +1,4 @@
-use super::Build;
+use super::{file_selector::FileSelector, Build};
 
 use std::{collections::*, fmt::Display, path::*, process::*};
 
@@ -40,8 +40,12 @@ pub trait Target: Display + Send + Sync + 'static {
         Default::default()
     }
 
-    fn lockfiles(&self) -> HashSet<PathBuf> {
+    fn lock_files(&self) -> HashSet<PathBuf> {
         Default::default()
+    }
+
+    fn src_files(&self) -> anyhow::Result<Option<FileSelector>> {
+        Ok(None)
     }
 }
 

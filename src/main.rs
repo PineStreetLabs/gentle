@@ -1,3 +1,4 @@
+use anyhow::Context;
 use indicatif::*;
 use is_terminal::*;
 use serde::*;
@@ -12,12 +13,14 @@ use std::{
 use structopt::*;
 
 mod cache;
-mod lockfiles;
+mod file_selector;
+mod hash_files;
 
 mod multi_runner;
 use multi_runner::*;
 
 mod targets;
+use targets::*;
 
 #[derive(StructOpt)]
 struct Options {
@@ -72,6 +75,15 @@ pub struct Build {
     out: PathBuf,
 }
 
+impl Action {
+    fn can_cache_success(&self) -> bool {
+        match self {
+            Action::Test | Action::Lint | Action::Format => true,
+            Action::Build(_) => false,
+        }
+    }
+}
+
 impl Display for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -101,7 +113,8 @@ fn main() -> anyhow::Result<()> {
         Command::CacheLoad { from } => return cache::load(from),
         Command::CacheSave { to } => return cache::save(to),
         Command::LockfileHash => {
-            println!("{}", lockfiles::hash()?.to_hex());
+            let files = targets()?.into_iter().flat_map(|t| t.lock_files());
+            println!("{}", hash_files::hash_files(files)?.to_hex());
             return Ok(());
         }
         Command::Do(action) => action,
@@ -126,12 +139,12 @@ fn main() -> anyhow::Result<()> {
         let action = action.clone();
         runner
             .run(&format!("{} {target}", action.verb), move || {
-                match action.verb {
+                maybe_cache_success(&action.verb, &*target, || match &action.verb {
                     Action::Test => target.perform_test(),
                     Action::Lint => target.perform_lint(),
                     Action::Format => target.perform_format(),
-                    Action::Build(build) => target.perform_build(&build),
-                }
+                    Action::Build(build) => target.perform_build(build),
+                })
             })
             .map_err(|(id, err)| err.context(id))?;
     }
@@ -152,6 +165,38 @@ fn should_run(target: &str, skip: &HashSet<String>, filter: &Option<String>) -> 
     }
 
     true
+}
+
+fn maybe_cache_success(
+    action: &Action,
+    target: &dyn Target,
+    f: impl FnOnce() -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    if !action.can_cache_success() {
+        return f();
+    }
+
+    let files = match target.src_files()? {
+        None => return f(),
+        Some(f) => f,
+    };
+
+    let files = files.list().context("Listing files")?;
+    let hash = hash_files::hash_files(files)
+        .context("Hashing files")?
+        .to_hex();
+    let cache_path = PathBuf::from(format!(".gentle_cache/successes/{hash}"));
+
+    if cache_path.exists() {
+        return Ok(());
+    }
+
+    f()?;
+
+    std::fs::create_dir_all(cache_path.parent().expect("explicit subdirectory"))?;
+    std::fs::File::create(cache_path).context("Creating cache marker")?;
+
+    Ok(())
 }
 
 struct TermProgress {

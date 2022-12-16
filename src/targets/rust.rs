@@ -1,6 +1,7 @@
 use super::*;
 
 use anyhow::Context;
+use serde::Deserialize;
 
 #[linkme::distributed_slice(TARGET_DISCOVERY)]
 fn discover(path: &Path) -> anyhow::Result<Vec<Box<dyn Target>>> {
@@ -117,10 +118,65 @@ impl Target for RustCargoTarget {
         [self.path.join("target")].into_iter().collect()
     }
 
-    fn lockfiles(&self) -> HashSet<PathBuf> {
+    fn lock_files(&self) -> HashSet<PathBuf> {
         [self.path.join("Cargo.lock")]
             .into_iter()
             .filter(|p| p.exists())
             .collect()
     }
+
+    fn src_files(&self) -> anyhow::Result<Option<FileSelector>> {
+        let direct = FileSelector::builder()
+            .set_subdir(&self.path)
+            .path("Cargo.toml")
+            .path("Cargo.lock")
+            .glob("src/**/*.rs")
+            .unwrap()
+            .glob("test/**/*.rs")
+            .unwrap()
+            .build();
+
+        let cargo_toml_contents = std::fs::read_to_string(self.path.join("Cargo.toml"))?;
+        let cargo_toml: CargoTomlFile = toml::de::from_str(&cargo_toml_contents)?;
+
+        let paths = cargo_toml
+            .dependencies
+            .into_values()
+            .filter_map(|d| match d {
+                Dependency::Pathed { path } => Some(path),
+                _ => None,
+            });
+
+        let mut result = direct;
+        for path in paths {
+            let target = RustCargoTarget::new(&self.path.join(&path));
+            let target_srcs = target
+                .src_files()?
+                .expect("implemented for RustCargoTarget");
+
+            result.include(target_srcs);
+        }
+
+        Ok(Some(result))
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct CargoTomlFile {
+    dependencies: BTreeMap<String, Dependency>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum Dependency {
+    Pathed {
+        path: PathBuf,
+    },
+
+    // These are so that serde can parse different dependencies.
+    JustVersion(String),
+    #[allow(dead_code)]
+    Versioned {
+        version: String,
+    },
 }
