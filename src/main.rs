@@ -185,7 +185,7 @@ fn maybe_cache_success(
     let hash = hash_files::hash_files(files)
         .context("Hashing files")?
         .to_hex();
-    let cache_path = PathBuf::from(format!(".gentle_cache/successes/{hash}"));
+    let cache_path = PathBuf::from(format!(".gentle_cache/successes/{hash}/{action}"));
 
     if cache_path.exists() {
         return Ok(());
